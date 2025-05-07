@@ -1,12 +1,16 @@
-import React, { useEffect, useRef, useState } from "react";
-import { styled } from "@mui/material/styles";
+import React, { useState, useEffect, useRef } from "react";
 import {
   Box,
   IconButton,
   Slider,
   Typography,
+  useTheme,
+  useMediaQuery,
   Paper,
-  Grid,
+  Card,
+  CardMedia,
+  CardContent,
+  Collapse,
 } from "@mui/material";
 import {
   PlayArrow,
@@ -15,339 +19,281 @@ import {
   SkipPrevious,
   VolumeUp,
   VolumeOff,
+  ExpandMore,
+  ExpandLess,
 } from "@mui/icons-material";
 import { usePlayer } from "../context/PlayerContext";
-
-const PlayerContainer = styled(Paper)(({ theme }) => ({
-  position: "fixed",
-  bottom: 0,
-  left: 0,
-  right: 0,
-  padding: theme.spacing(2),
-  backgroundColor: theme.palette.background.paper,
-  borderTop: "1px solid rgba(255, 255, 255, 0.12)",
-  zIndex: theme.zIndex.appBar,
-}));
-
-const formatTime = (seconds) => {
-  if (!seconds || isNaN(seconds)) return "0:00";
-  const minutes = Math.floor(seconds / 60);
-  const remainingSeconds = Math.floor(seconds % 60);
-  return `${minutes}:${remainingSeconds.toString().padStart(2, "0")}`;
-};
 
 function Player() {
   const {
     currentTrack,
     isPlaying,
-    progress,
+    volume,
     currentTime,
     duration,
-    volume,
+    progress,
     handlePlay,
     handlePause,
+    handleVolumeChange,
+    handleSeek,
     handleNext,
     handlePrevious,
-    handleSeek,
-    handleVolumeChange: setVolume,
   } = usePlayer();
 
-  const youtubePlayerRef = useRef(null);
   const [isYouTube, setIsYouTube] = useState(false);
-  const [youtubeReady, setYoutubeReady] = useState(false);
-  const [youtubeCurrentTime, setYoutubeCurrentTime] = useState(0);
-  const [youtubeDuration, setYoutubeDuration] = useState(0);
+  const [isYouTubeReady, setIsYouTubeReady] = useState(false);
+  const [showControls, setShowControls] = useState(true);
+  const [isExpanded, setIsExpanded] = useState(false);
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
+  const playerRef = useRef(null);
+  const controlsTimeoutRef = useRef(null);
 
-  // Load YouTube IFrame API
   useEffect(() => {
-    if (!window.YT) {
-      const tag = document.createElement("script");
-      tag.src = "https://www.youtube.com/iframe_api";
-      const firstScriptTag = document.getElementsByTagName("script")[0];
-      firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+    if (currentTrack?.id?.length === 11) {
+      setIsYouTube(true);
+      if (!window.YT) {
+        const tag = document.createElement("script");
+        tag.src = "https://www.youtube.com/iframe_api";
+        const firstScriptTag = document.getElementsByTagName("script")[0];
+        firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
 
-      window.onYouTubeIframeAPIReady = () => {
-        setYoutubeReady(true);
-      };
-    } else {
-      setYoutubeReady(true);
-    }
-
-    return () => {
-      if (youtubePlayerRef.current) {
-        youtubePlayerRef.current.destroy();
-      }
-    };
-  }, []);
-
-  // Initialize YouTube player
-  useEffect(() => {
-    if (
-      !youtubeReady ||
-      !currentTrack ||
-      !currentTrack.id ||
-      currentTrack.id.length !== 11
-    ) {
-      setIsYouTube(false);
-      return;
-    }
-
-    setIsYouTube(true);
-
-    const initializePlayer = () => {
-      if (youtubePlayerRef.current) {
-        youtubePlayerRef.current.destroy();
-      }
-
-      youtubePlayerRef.current = new window.YT.Player("youtube-player", {
-        height: "0",
-        width: "0",
-        videoId: currentTrack.id,
-        playerVars: {
-          autoplay: isPlaying ? 1 : 0,
-          controls: 0,
-          disablekb: 1,
-          enablejsapi: 1,
-          fs: 0,
-          modestbranding: 1,
-          rel: 0,
-          origin: window.location.origin,
-        },
-        events: {
-          onReady: (event) => {
-            const youtubeVolume = Math.round(volume * 100);
-            event.target.setVolume(youtubeVolume);
-            if (youtubeVolume === 0) {
-              event.target.mute();
-            } else {
-              event.target.unMute();
-            }
-            const duration = event.target.getDuration();
-            setYoutubeDuration(duration);
-            if (isPlaying) {
-              event.target.playVideo();
-            }
-          },
-          onStateChange: (event) => {
-            if (event.data === window.YT.PlayerState.ENDED) {
-              handleNext();
-            } else if (event.data === window.YT.PlayerState.PAUSED) {
-              handlePause();
-            } else if (event.data === window.YT.PlayerState.PLAYING) {
-              handlePlay();
-            }
-          },
-          onError: (event) => {
-            console.error("YouTube Player Error:", event.data);
-            setIsYouTube(false);
-          },
-        },
-      });
-    };
-
-    // Small delay to ensure the container is ready
-    setTimeout(initializePlayer, 100);
-  }, [
-    currentTrack,
-    youtubeReady,
-    isPlaying,
-    volume,
-    handleNext,
-    handlePlay,
-    handlePause,
-  ]);
-
-  // Handle play/pause for YouTube videos
-  const handlePlayPause = () => {
-    if (isYouTube && youtubePlayerRef.current) {
-      try {
-        if (isPlaying) {
-          youtubePlayerRef.current.pauseVideo();
-          handlePause();
-        } else {
-          youtubePlayerRef.current.playVideo();
-          handlePlay();
-        }
-      } catch (error) {
-        console.error("Error controlling YouTube player:", error);
-      }
-    } else {
-      if (isPlaying) {
-        handlePause();
+        window.onYouTubeIframeAPIReady = () => {
+          setIsYouTubeReady(true);
+        };
       } else {
-        handlePlay();
-      }
-    }
-  };
-
-  // Handle next track for YouTube videos
-  const handleNextTrack = () => {
-    if (youtubePlayerRef.current) {
-      youtubePlayerRef.current.destroy();
-      youtubePlayerRef.current = null;
-    }
-    handleNext();
-  };
-
-  // Handle previous track for YouTube videos
-  const handlePreviousTrack = () => {
-    if (youtubePlayerRef.current) {
-      youtubePlayerRef.current.destroy();
-      youtubePlayerRef.current = null;
-    }
-    handlePrevious();
-  };
-
-  // Update YouTube progress
-  useEffect(() => {
-    let interval;
-    if (isYouTube && youtubePlayerRef.current && isPlaying) {
-      interval = setInterval(() => {
-        try {
-          const currentTime = youtubePlayerRef.current.getCurrentTime();
-          const duration = youtubePlayerRef.current.getDuration();
-          if (currentTime && duration) {
-            setYoutubeCurrentTime(currentTime);
-            setYoutubeDuration(duration);
-            handleSeek(currentTime / duration);
-          }
-        } catch (error) {
-          console.error("Error updating YouTube progress:", error);
-        }
-      }, 100); // Update more frequently for smoother progress
-    }
-    return () => {
-      if (interval) {
-        clearInterval(interval);
-      }
-    };
-  }, [isYouTube, isPlaying, handleSeek]);
-
-  // Handle seek for YouTube videos
-  const handleYouTubeSeek = (value) => {
-    if (isYouTube && youtubePlayerRef.current) {
-      try {
-        const seekTime = value * youtubeDuration;
-        youtubePlayerRef.current.seekTo(seekTime, true);
-        setYoutubeCurrentTime(seekTime);
-        handleSeek(value);
-      } catch (error) {
-        console.error("Error seeking YouTube video:", error);
+        setIsYouTubeReady(true);
       }
     } else {
-      handleSeek(value);
+      setIsYouTube(false);
     }
-  };
+  }, [currentTrack]);
 
-  // Handle volume change
-  const handleVolumeChange = (newVolume) => {
-    if (isYouTube && youtubePlayerRef.current) {
+  useEffect(() => {
+    if (isYouTube && isYouTubeReady && playerRef.current) {
       try {
-        const youtubeVolume = Math.round(newVolume * 100);
-        youtubePlayerRef.current.setVolume(youtubeVolume);
-        if (youtubeVolume === 0) {
-          youtubePlayerRef.current.mute();
-        } else {
-          youtubePlayerRef.current.unMute();
-        }
+        const player = new window.YT.Player(playerRef.current, {
+          height: "0",
+          width: "0",
+          videoId: currentTrack.id,
+          playerVars: {
+            autoplay: isPlaying ? 1 : 0,
+            controls: 0,
+            disablekb: 1,
+            enablejsapi: 1,
+            fs: 0,
+            modestbranding: 1,
+            playsinline: 1,
+            rel: 0,
+          },
+          events: {
+            onReady: (event) => {
+              event.target.setVolume(volume * 100);
+              if (isPlaying) {
+                event.target.playVideo();
+              }
+            },
+            onStateChange: (event) => {
+              if (event.data === window.YT.PlayerState.ENDED) {
+                handleNext();
+              }
+            },
+            onError: (event) => {
+              console.error("YouTube Player Error:", event);
+            },
+          },
+        });
+
+        return () => {
+          if (player && player.destroy) {
+            player.destroy();
+          }
+        };
       } catch (error) {
-        console.error("Error setting YouTube volume:", error);
+        console.error("Error initializing YouTube player:", error);
       }
     }
-    setVolume(newVolume);
+  }, [isYouTube, isYouTubeReady, currentTrack, isPlaying, volume, handleNext]);
+
+  const formatTime = (time) => {
+    const minutes = Math.floor(time / 60);
+    const seconds = Math.floor(time % 60);
+    return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+  };
+
+  const handleMouseMove = () => {
+    setShowControls(true);
+    if (controlsTimeoutRef.current) {
+      clearTimeout(controlsTimeoutRef.current);
+    }
+    controlsTimeoutRef.current = setTimeout(() => {
+      setShowControls(false);
+    }, 3000);
   };
 
   if (!currentTrack) return null;
 
   return (
-    <PlayerContainer elevation={3}>
-      <Grid container spacing={2} alignItems="center">
-        <Grid item xs={12} md={4}>
-          <Box display="flex" alignItems="center">
-            <img
-              src={currentTrack.cover}
-              alt={currentTrack.title}
-              style={{
-                width: 56,
-                height: 56,
-                marginRight: 16,
-                borderRadius: 4,
-              }}
-            />
-            <Box>
-              <Typography variant="subtitle1">{currentTrack.title}</Typography>
-              <Typography variant="body2" color="textSecondary">
-                {currentTrack.artist}
-              </Typography>
-            </Box>
-          </Box>
-        </Grid>
+    <Paper
+      elevation={3}
+      sx={{
+        position: "fixed",
+        bottom: 0,
+        left: 0,
+        right: 0,
+        zIndex: theme.zIndex.appBar,
+        bgcolor: "background.paper",
+        borderTop: "1px solid rgba(255, 255, 255, 0.12)",
+      }}
+      onMouseMove={handleMouseMove}
+      onTouchStart={handleMouseMove}
+    >
+      <Box
+        sx={{
+          display: "flex",
+          alignItems: "center",
+          p: { xs: 1, sm: 2 },
+          gap: { xs: 1, sm: 2 },
+        }}
+      >
+        <Card
+          sx={{
+            display: "flex",
+            width: { xs: 56, sm: 64 },
+            height: { xs: 56, sm: 64 },
+            cursor: "pointer",
+          }}
+          onClick={() => setIsExpanded(!isExpanded)}
+        >
+          <CardMedia
+            component="img"
+            image={currentTrack.cover}
+            alt={currentTrack.title}
+            sx={{ width: "100%", height: "100%" }}
+          />
+        </Card>
 
-        <Grid item xs={12} md={4}>
-          <Box display="flex" flexDirection="column" alignItems="center">
-            <Box display="flex" alignItems="center" mb={1}>
-              <IconButton onClick={handlePreviousTrack}>
-                <SkipPrevious />
-              </IconButton>
-              <IconButton onClick={handlePlayPause} size="large">
-                {isPlaying ? <Pause /> : <PlayArrow />}
-              </IconButton>
-              <IconButton onClick={handleNextTrack}>
-                <SkipNext />
-              </IconButton>
-            </Box>
-            <Box display="flex" alignItems="center" width="100%">
-              <Typography variant="caption" sx={{ mr: 1 }}>
-                {formatTime(isYouTube ? youtubeCurrentTime : currentTime)}
-              </Typography>
-              <Slider
-                value={progress}
-                onChange={(_, value) => handleYouTubeSeek(value)}
-                min={0}
-                max={1}
-                step={0.01}
-              />
-              <Typography variant="caption" sx={{ ml: 1 }}>
-                {formatTime(isYouTube ? youtubeDuration : duration)}
-              </Typography>
-            </Box>
-          </Box>
-        </Grid>
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Typography variant="subtitle1" noWrap>
+            {currentTrack.title}
+          </Typography>
+          <Typography variant="body2" color="textSecondary" noWrap>
+            {currentTrack.artist}
+          </Typography>
+        </Box>
 
-        <Grid item xs={12} md={4}>
-          <Box display="flex" alignItems="center" justifyContent="flex-end">
-            <IconButton
-              onClick={() => handleVolumeChange(volume === 0 ? 1 : 0)}
-            >
-              {volume === 0 ? <VolumeOff /> : <VolumeUp />}
-            </IconButton>
+        <Box
+          sx={{
+            display: "flex",
+            alignItems: "center",
+            gap: { xs: 0.5, sm: 1 },
+          }}
+        >
+          <IconButton
+            onClick={handlePrevious}
+            size={isMobile ? "small" : "medium"}
+          >
+            <SkipPrevious />
+          </IconButton>
+          <IconButton
+            onClick={isPlaying ? handlePause : handlePlay}
+            size={isMobile ? "small" : "medium"}
+          >
+            {isPlaying ? <Pause /> : <PlayArrow />}
+          </IconButton>
+          <IconButton onClick={handleNext} size={isMobile ? "small" : "medium"}>
+            <SkipNext />
+          </IconButton>
+        </Box>
+
+        <Box
+          sx={{
+            display: { xs: "none", sm: "flex" },
+            alignItems: "center",
+            width: 200,
+            gap: 1,
+          }}
+        >
+          <IconButton
+            onClick={() => handleVolumeChange(volume === 0 ? 0.5 : 0)}
+            size="small"
+          >
+            {volume === 0 ? <VolumeOff /> : <VolumeUp />}
+          </IconButton>
+          <Slider
+            value={volume}
+            onChange={(_, value) => handleVolumeChange(value)}
+            min={0}
+            max={1}
+            step={0.01}
+            size="small"
+          />
+        </Box>
+
+        <IconButton
+          onClick={() => setIsExpanded(!isExpanded)}
+          size={isMobile ? "small" : "medium"}
+        >
+          {isExpanded ? <ExpandLess /> : <ExpandMore />}
+        </IconButton>
+      </Box>
+
+      <Collapse in={isExpanded}>
+        <Box sx={{ p: 2 }}>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 2, mb: 1 }}>
+            <Typography variant="body2" color="textSecondary">
+              {formatTime(currentTime)}
+            </Typography>
             <Slider
-              value={volume}
-              onChange={(_, value) => handleVolumeChange(value)}
+              value={progress}
+              onChange={(_, value) => handleSeek(value)}
               min={0}
               max={1}
               step={0.01}
-              sx={{ width: 100 }}
+              sx={{ flex: 1 }}
             />
+            <Typography variant="body2" color="textSecondary">
+              {formatTime(duration)}
+            </Typography>
           </Box>
-        </Grid>
-      </Grid>
 
-      {/* Hidden YouTube player */}
+          {isMobile && (
+            <Box sx={{ display: "flex", alignItems: "center", gap: 1, mt: 1 }}>
+              <IconButton
+                onClick={() => handleVolumeChange(volume === 0 ? 0.5 : 0)}
+                size="small"
+              >
+                {volume === 0 ? <VolumeOff /> : <VolumeUp />}
+              </IconButton>
+              <Slider
+                value={volume}
+                onChange={(_, value) => handleVolumeChange(value)}
+                min={0}
+                max={1}
+                step={0.01}
+                size="small"
+                sx={{ flex: 1 }}
+              />
+            </Box>
+          )}
+        </Box>
+      </Collapse>
+
       {isYouTube && (
         <div
-          id="youtube-player"
+          ref={playerRef}
           style={{
             position: "absolute",
-            top: "-9999px",
-            left: "-9999px",
+            top: 0,
+            left: 0,
             width: "1px",
             height: "1px",
-            overflow: "hidden",
+            opacity: 0,
+            pointerEvents: "none",
           }}
         />
       )}
-    </PlayerContainer>
+    </Paper>
   );
 }
 

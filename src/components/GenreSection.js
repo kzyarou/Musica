@@ -13,6 +13,8 @@ import {
   Paper,
   Button,
   Alert,
+  useTheme,
+  useMediaQuery,
 } from "@mui/material";
 import { PlayArrow, TrendingUp } from "@mui/icons-material";
 import { GENRES } from "../services/musicApi";
@@ -25,6 +27,8 @@ function GenreSection() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const { setTrack, setQueue } = usePlayer();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
 
   useEffect(() => {
     const loadTracks = async () => {
@@ -84,8 +88,8 @@ function GenreSection() {
   const trendingTrack = tracks[0] || null;
 
   return (
-    <Box sx={{ mt: 4 }}>
-      <Typography variant="h5" sx={{ mb: 2 }}>
+    <Box sx={{ mt: { xs: 2, sm: 4 } }}>
+      <Typography variant="h5" sx={{ mb: 2, px: { xs: 1, sm: 0 } }}>
         Browse by Genre
       </Typography>
 
@@ -94,11 +98,13 @@ function GenreSection() {
         onChange={handleGenreChange}
         variant="scrollable"
         scrollButtons="auto"
+        allowScrollButtonsMobile
         sx={{
           mb: 3,
+          px: { xs: 1, sm: 0 },
           "& .MuiTab-root": {
             minWidth: "auto",
-            px: 2,
+            px: { xs: 1, sm: 2 },
           },
         }}
       >
@@ -108,7 +114,7 @@ function GenreSection() {
       </Tabs>
 
       {error && (
-        <Alert severity="error" sx={{ mb: 3 }}>
+        <Alert severity="error" sx={{ mb: 3, mx: { xs: 1, sm: 0 } }}>
           {error}
         </Alert>
       )}
@@ -117,8 +123,9 @@ function GenreSection() {
       {trendingTrack && !error && (
         <Paper
           sx={{
-            p: 3,
+            p: { xs: 2, sm: 3 },
             mb: 4,
+            mx: { xs: 1, sm: 0 },
             background: "linear-gradient(45deg, #1a1a1a 30%, #2d2d2d 90%)",
             color: "white",
           }}
@@ -133,7 +140,12 @@ function GenreSection() {
             <Grid item xs={12} md={4}>
               <CardMedia
                 component="img"
-                sx={{ width: "100%", borderRadius: 1 }}
+                sx={{
+                  width: "100%",
+                  borderRadius: 1,
+                  aspectRatio: "1",
+                  objectFit: "cover",
+                }}
                 image={trendingTrack.cover}
                 alt={trendingTrack.title}
                 onError={(e) => {
@@ -143,13 +155,21 @@ function GenreSection() {
               />
             </Grid>
             <Grid item xs={12} md={8}>
-              <Typography variant="h5" gutterBottom>
+              <Typography
+                variant="h5"
+                gutterBottom
+                sx={{
+                  fontSize: { xs: "1.25rem", sm: "1.5rem" },
+                  fontWeight: 500,
+                }}
+              >
                 {trendingTrack.title}
               </Typography>
               <Typography
                 variant="subtitle1"
                 color="text.secondary"
                 gutterBottom
+                sx={{ opacity: 0.8 }}
               >
                 {trendingTrack.artist}
               </Typography>
@@ -158,6 +178,7 @@ function GenreSection() {
                 startIcon={<PlayArrow />}
                 onClick={() => handleTrackClick(trendingTrack)}
                 sx={{ mt: 2 }}
+                fullWidth={isMobile}
               >
                 Play Now
               </Button>
@@ -166,7 +187,7 @@ function GenreSection() {
         </Paper>
       )}
 
-      <Typography variant="h5" sx={{ mb: 2 }}>
+      <Typography variant="h5" sx={{ mb: 2, px: { xs: 1, sm: 0 } }}>
         More {currentGenre.name} Tracks
       </Typography>
 
@@ -175,9 +196,9 @@ function GenreSection() {
           <CircularProgress />
         </Box>
       ) : tracks.length > 1 ? (
-        <Grid container spacing={3}>
+        <Grid container spacing={{ xs: 1, sm: 2, md: 3 }}>
           {tracks.slice(1).map((track) => (
-            <Grid item xs={12} sm={6} md={4} lg={3} key={track.id}>
+            <Grid item xs={6} sm={4} md={3} key={track.id}>
               <Card
                 sx={{
                   height: "100%",
@@ -192,7 +213,10 @@ function GenreSection() {
               >
                 <CardMedia
                   component="img"
-                  height="200"
+                  sx={{
+                    aspectRatio: "1",
+                    objectFit: "cover",
+                  }}
                   image={track.cover}
                   alt={track.title}
                   onError={(e) => {
@@ -200,11 +224,20 @@ function GenreSection() {
                       "https://via.placeholder.com/300x300?text=No+Image";
                   }}
                 />
-                <CardContent>
-                  <Typography variant="subtitle1" noWrap>
+                <CardContent sx={{ flexGrow: 1, p: { xs: 1, sm: 2 } }}>
+                  <Typography
+                    variant="subtitle1"
+                    noWrap
+                    sx={{ fontSize: { xs: "0.875rem", sm: "1rem" } }}
+                  >
                     {track.title}
                   </Typography>
-                  <Typography variant="body2" color="textSecondary" noWrap>
+                  <Typography
+                    variant="body2"
+                    color="textSecondary"
+                    noWrap
+                    sx={{ fontSize: { xs: "0.75rem", sm: "0.875rem" } }}
+                  >
                     {track.artist}
                   </Typography>
                 </CardContent>
@@ -213,7 +246,12 @@ function GenreSection() {
           ))}
         </Grid>
       ) : !error ? (
-        <Typography variant="body1" color="textSecondary" align="center">
+        <Typography
+          variant="body1"
+          color="textSecondary"
+          align="center"
+          sx={{ px: { xs: 1, sm: 0 } }}
+        >
           No additional tracks found for this genre.
         </Typography>
       ) : null}
