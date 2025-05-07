@@ -122,7 +122,8 @@ function Player() {
             } else {
               event.target.unMute();
             }
-            setYoutubeDuration(event.target.getDuration());
+            const duration = event.target.getDuration();
+            setYoutubeDuration(duration);
             if (isPlaying) {
               event.target.playVideo();
             }
@@ -130,6 +131,10 @@ function Player() {
           onStateChange: (event) => {
             if (event.data === window.YT.PlayerState.ENDED) {
               handleNext();
+            } else if (event.data === window.YT.PlayerState.PAUSED) {
+              handlePause();
+            } else if (event.data === window.YT.PlayerState.PLAYING) {
+              handlePlay();
             }
           },
           onError: (event) => {
@@ -142,7 +147,15 @@ function Player() {
 
     // Small delay to ensure the container is ready
     setTimeout(initializePlayer, 100);
-  }, [currentTrack, youtubeReady, isPlaying, volume, handleNext]);
+  }, [
+    currentTrack,
+    youtubeReady,
+    isPlaying,
+    volume,
+    handleNext,
+    handlePlay,
+    handlePause,
+  ]);
 
   // Handle play/pause for YouTube videos
   const handlePlayPause = () => {
@@ -185,23 +198,6 @@ function Player() {
     handlePrevious();
   };
 
-  // Update YouTube volume
-  useEffect(() => {
-    if (!isYouTube || !youtubePlayerRef.current) return;
-
-    try {
-      const youtubeVolume = Math.round(volume * 100);
-      youtubePlayerRef.current.setVolume(youtubeVolume);
-      if (youtubeVolume === 0) {
-        youtubePlayerRef.current.mute();
-      } else {
-        youtubePlayerRef.current.unMute();
-      }
-    } catch (error) {
-      console.error("Error setting YouTube volume:", error);
-    }
-  }, [volume, isYouTube]);
-
   // Update YouTube progress
   useEffect(() => {
     let interval;
@@ -218,7 +214,7 @@ function Player() {
         } catch (error) {
           console.error("Error updating YouTube progress:", error);
         }
-      }, 1000);
+      }, 100); // Update more frequently for smoother progress
     }
     return () => {
       if (interval) {
