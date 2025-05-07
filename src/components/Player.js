@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { styled } from "@mui/material/styles";
 import {
   Box,
@@ -44,77 +44,115 @@ function Player() {
     currentTime,
     duration,
     volume,
-    isYouTube,
     handlePlay,
     handlePause,
     handleNext,
     handlePrevious,
     handleSeek,
     handleVolumeChange,
-    setYoutubePlayer,
   } = usePlayer();
 
   const youtubePlayerRef = useRef(null);
+  const [isYouTube, setIsYouTube] = useState(false);
+  const [youtubeReady, setYoutubeReady] = useState(false);
 
+  // Load YouTube IFrame API
   useEffect(() => {
-    // Load YouTube IFrame API if not already loaded
     if (!window.YT) {
       const tag = document.createElement("script");
       tag.src = "https://www.youtube.com/iframe_api";
       const firstScriptTag = document.getElementsByTagName("script")[0];
       firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+
+      window.onYouTubeIframeAPIReady = () => {
+        setYoutubeReady(true);
+      };
+    } else {
+      setYoutubeReady(true);
     }
+  }, []);
 
-    // Initialize YouTube player when API is ready
-    window.onYouTubeIframeAPIReady = () => {
-      if (isYouTube && currentTrack && !youtubePlayerRef.current) {
-        youtubePlayerRef.current = new window.YT.Player("youtube-player", {
-          height: "0",
-          width: "0",
-          videoId: currentTrack.id,
-          playerVars: {
-            autoplay: 1,
-            controls: 0,
-            disablekb: 1,
-            enablejsapi: 1,
-            fs: 0,
-            modestbranding: 1,
-            rel: 0,
-          },
-          events: {
-            onReady: (event) => {
-              setYoutubePlayer(event.target);
-              event.target.setVolume(volume * 100);
-              event.target.playVideo();
-            },
-            onStateChange: (event) => {
-              if (event.data === window.YT.PlayerState.ENDED) {
-                handleNext();
-              }
-            },
-            onError: (event) => {
-              console.error("YouTube Player Error:", event);
-            },
-          },
-        });
-      }
-    };
-
-    // Cleanup function
-    return () => {
+  // Initialize YouTube player
+  useEffect(() => {
+    if (
+      youtubeReady &&
+      currentTrack &&
+      currentTrack.id &&
+      currentTrack.id.length === 11
+    ) {
+      setIsYouTube(true);
       if (youtubePlayerRef.current) {
         youtubePlayerRef.current.destroy();
-        youtubePlayerRef.current = null;
+      }
+
+      youtubePlayerRef.current = new window.YT.Player("youtube-player", {
+        height: "0",
+        width: "0",
+        videoId: currentTrack.id,
+        playerVars: {
+          autoplay: isPlaying ? 1 : 0,
+          controls: 0,
+          disablekb: 1,
+          enablejsapi: 1,
+          fs: 0,
+          modestbranding: 1,
+          rel: 0,
+        },
+        events: {
+          onReady: (event) => {
+            event.target.setVolume(volume * 100);
+            if (isPlaying) {
+              event.target.playVideo();
+            }
+          },
+          onStateChange: (event) => {
+            if (event.data === window.YT.PlayerState.ENDED) {
+              handleNext();
+            }
+          },
+        },
+      });
+    } else {
+      setIsYouTube(false);
+    }
+  }, [currentTrack, youtubeReady, isPlaying, volume, handleNext]);
+
+  // Update YouTube player state
+  useEffect(() => {
+    if (isYouTube && youtubePlayerRef.current) {
+      if (isPlaying) {
+        youtubePlayerRef.current.playVideo();
+      } else {
+        youtubePlayerRef.current.pauseVideo();
+      }
+    }
+  }, [isPlaying, isYouTube]);
+
+  // Update YouTube volume
+  useEffect(() => {
+    if (isYouTube && youtubePlayerRef.current) {
+      youtubePlayerRef.current.setVolume(volume * 100);
+    }
+  }, [volume, isYouTube]);
+
+  // Update YouTube progress
+  useEffect(() => {
+    let interval;
+    if (isYouTube && youtubePlayerRef.current && isPlaying) {
+      interval = setInterval(() => {
+        const currentTime = youtubePlayerRef.current.getCurrentTime();
+        const duration = youtubePlayerRef.current.getDuration();
+        if (currentTime && duration) {
+          handleSeek(currentTime / duration);
+        }
+      }, 1000);
+    }
+    return () => {
+      if (interval) {
+        clearInterval(interval);
       }
     };
-  }, [isYouTube, currentTrack]);
-
-  // Update YouTube player when track changes
-  useEffect(() => {
-    if (isYouTube && youtubePlayerRef.current && currentTrack) {
-      youtubePlayerRef.current.loadVideoById(currentTrack.id);
-    }
-  }, [currentTrack, isYouTube]);
+  }, [isYouTube, isPlaying, handleSeek]);
 
   if (!currentTrack) return null;
 
