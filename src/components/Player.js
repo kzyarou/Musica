@@ -11,6 +11,9 @@ import {
   CardMedia,
   CardContent,
   Collapse,
+  Tooltip,
+  Snackbar,
+  Alert,
 } from "@mui/material";
 import {
   PlayArrow,
@@ -21,6 +24,7 @@ import {
   VolumeOff,
   ExpandMore,
   ExpandLess,
+  Download,
 } from "@mui/icons-material";
 import { usePlayer } from "../context/PlayerContext";
 
@@ -44,6 +48,11 @@ function Player() {
   const [isYouTubeReady, setIsYouTubeReady] = useState(false);
   const [showControls, setShowControls] = useState(true);
   const [isExpanded, setIsExpanded] = useState(false);
+  const [downloadStatus, setDownloadStatus] = useState({
+    open: false,
+    message: "",
+    severity: "success",
+  });
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
   const playerRef = useRef(null);
@@ -129,6 +138,61 @@ function Player() {
     controlsTimeoutRef.current = setTimeout(() => {
       setShowControls(false);
     }, 3000);
+  };
+
+  const handleDownload = async () => {
+    if (!currentTrack) return;
+
+    try {
+      if (isYouTube) {
+        // For YouTube videos, we'll use a proxy service
+        const response = await fetch(
+          `/api/download?videoId=${currentTrack.id}`
+        );
+        if (!response.ok) throw new Error("Download failed");
+
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `${currentTrack.title}.mp3`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+      } else {
+        // For regular audio files
+        const response = await fetch(currentTrack.url);
+        if (!response.ok) throw new Error("Download failed");
+
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `${currentTrack.title}.mp3`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+      }
+
+      setDownloadStatus({
+        open: true,
+        message: "Download started",
+        severity: "success",
+      });
+    } catch (error) {
+      console.error("Download error:", error);
+      setDownloadStatus({
+        open: true,
+        message: "Download failed. Please try again.",
+        severity: "error",
+      });
+    }
+  };
+
+  const handleCloseSnackbar = () => {
+    setDownloadStatus({ ...downloadStatus, open: false });
   };
 
   if (!currentTrack) return null;
@@ -230,6 +294,15 @@ function Player() {
           />
         </Box>
 
+        <Tooltip title="Download">
+          <IconButton
+            onClick={handleDownload}
+            size={isMobile ? "small" : "medium"}
+          >
+            <Download />
+          </IconButton>
+        </Tooltip>
+
         <IconButton
           onClick={() => setIsExpanded(!isExpanded)}
           size={isMobile ? "small" : "medium"}
@@ -293,6 +366,20 @@ function Player() {
           }}
         />
       )}
+
+      <Snackbar
+        open={downloadStatus.open}
+        autoHideDuration={3000}
+        onClose={handleCloseSnackbar}
+      >
+        <Alert
+          onClose={handleCloseSnackbar}
+          severity={downloadStatus.severity}
+          sx={{ width: "100%" }}
+        >
+          {downloadStatus.message}
+        </Alert>
+      </Snackbar>
     </Paper>
   );
 }

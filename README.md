@@ -1,30 +1,31 @@
-# Music Player React Application
+# Musica - Modern Music Player
 
-A modern music player application built with React and Material-UI, featuring YouTube integration and genre-based browsing.
+A modern music player application built with React, featuring YouTube integration, genre-based browsing, and playlist management.
 
 ## Features
 
-- Browse music by genre
-- Play YouTube videos directly in the app
-- Featured tracks section
-- Recently played tracks
-- Trending YouTube videos
-- Modern and responsive UI
-- Automatic deployments to Vercel
+- 🎵 Play music from YouTube
+- 🎨 Modern, responsive UI
+- 📱 Mobile-friendly design
+- 🎧 Genre-based music browsing
+- 📋 Playlist management
+- 💾 Download tracks for offline listening
+- 🌙 Dark mode support
 
-## Prerequisites
+## Getting Started
+
+### Prerequisites
 
 - Node.js (v14 or higher)
-- npm or yarn
-- YouTube API key (for video search functionality)
+- npm (v6 or higher)
 
-## Installation
+### Installation
 
 1. Clone the repository:
 
 ```bash
-git clone https://github.com/kzyarou/Musica.git
-cd Musica
+git clone https://github.com/yourusername/musica.git
+cd musica
 ```
 
 2. Install dependencies:
@@ -33,56 +34,74 @@ cd Musica
 npm install
 ```
 
-3. Create a `.env` file in the root directory and add your YouTube API key:
-
-```
-REACT_APP_YOUTUBE_API_KEY=your_api_key_here
-```
-
-4. Start the development server:
+3. Start the development server:
 
 ```bash
 npm start
 ```
 
-## Project Structure
+The application will be available at `http://localhost:3000`.
 
+## Building for Mobile
+
+### Android
+
+1. Install Android Studio and Android SDK
+2. Add Android platform:
+
+```bash
+npm run cap:add:android
 ```
-src/
-  ├── components/     # React components
-  ├── context/       # React context providers
-  ├── services/      # API services
-  ├── styles/        # Global styles
-  └── App.js         # Main application component
+
+3. Sync the build:
+
+```bash
+npm run cap:sync
+```
+
+4. Open in Android Studio:
+
+```bash
+npm run cap:open:android
+```
+
+### iOS (requires macOS)
+
+1. Install Xcode
+2. Add iOS platform:
+
+```bash
+npm run cap:add:ios
+```
+
+3. Sync the build:
+
+```bash
+npm run cap:sync
+```
+
+4. Open in Xcode:
+
+```bash
+npm run cap:open:ios
 ```
 
 ## Technologies Used
 
 - React
 - Material-UI
-- YouTube IFrame API
-- Howler.js for audio playback
-- Vercel for deployment
-
-## Deployment
-
-This project is automatically deployed to Vercel whenever changes are pushed to the main branch. The deployment process includes:
-
-1. Building the React application
-2. Running tests (if configured)
-3. Deploying to Vercel's global CDN
-4. Providing a unique URL for each deployment
-
-You can view the latest deployment at: [https://musica-kzyarou.vercel.app](https://musica-kzyarou.vercel.app)
+- Capacitor
+- YouTube API
+- Howler.js
 
 ## Contributing
 
 1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add some amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
+2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
+3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
+4. Push to the branch (`git push origin feature/AmazingFeature`)
 5. Open a Pull Request
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
