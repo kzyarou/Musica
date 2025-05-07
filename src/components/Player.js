@@ -49,12 +49,14 @@ function Player() {
     handleNext,
     handlePrevious,
     handleSeek,
-    handleVolumeChange,
+    handleVolumeChange: setVolume,
   } = usePlayer();
 
   const youtubePlayerRef = useRef(null);
   const [isYouTube, setIsYouTube] = useState(false);
   const [youtubeReady, setYoutubeReady] = useState(false);
+  const [youtubeCurrentTime, setYoutubeCurrentTime] = useState(0);
+  const [youtubeDuration, setYoutubeDuration] = useState(0);
 
   // Load YouTube IFrame API
   useEffect(() => {
@@ -86,6 +88,7 @@ function Player() {
       !currentTrack.id ||
       currentTrack.id.length !== 11
     ) {
+      setIsYouTube(false);
       return;
     }
 
@@ -112,7 +115,14 @@ function Player() {
         },
         events: {
           onReady: (event) => {
-            event.target.setVolume(volume * 100);
+            const youtubeVolume = Math.round(volume * 100);
+            event.target.setVolume(youtubeVolume);
+            if (youtubeVolume === 0) {
+              event.target.mute();
+            } else {
+              event.target.unMute();
+            }
+            setYoutubeDuration(event.target.getDuration());
             if (isPlaying) {
               event.target.playVideo();
             }
@@ -134,27 +144,59 @@ function Player() {
     setTimeout(initializePlayer, 100);
   }, [currentTrack, youtubeReady, isPlaying, volume, handleNext]);
 
-  // Update YouTube player state
-  useEffect(() => {
-    if (!isYouTube || !youtubePlayerRef.current) return;
-
-    try {
-      if (isPlaying) {
-        youtubePlayerRef.current.playVideo();
-      } else {
-        youtubePlayerRef.current.pauseVideo();
+  // Handle play/pause for YouTube videos
+  const handlePlayPause = () => {
+    if (isYouTube && youtubePlayerRef.current) {
+      try {
+        if (isPlaying) {
+          youtubePlayerRef.current.pauseVideo();
+          handlePause();
+        } else {
+          youtubePlayerRef.current.playVideo();
+          handlePlay();
+        }
+      } catch (error) {
+        console.error("Error controlling YouTube player:", error);
       }
-    } catch (error) {
-      console.error("Error controlling YouTube player:", error);
+    } else {
+      if (isPlaying) {
+        handlePause();
+      } else {
+        handlePlay();
+      }
     }
-  }, [isPlaying, isYouTube]);
+  };
+
+  // Handle next track for YouTube videos
+  const handleNextTrack = () => {
+    if (youtubePlayerRef.current) {
+      youtubePlayerRef.current.destroy();
+      youtubePlayerRef.current = null;
+    }
+    handleNext();
+  };
+
+  // Handle previous track for YouTube videos
+  const handlePreviousTrack = () => {
+    if (youtubePlayerRef.current) {
+      youtubePlayerRef.current.destroy();
+      youtubePlayerRef.current = null;
+    }
+    handlePrevious();
+  };
 
   // Update YouTube volume
   useEffect(() => {
     if (!isYouTube || !youtubePlayerRef.current) return;
 
     try {
-      youtubePlayerRef.current.setVolume(volume * 100);
+      const youtubeVolume = Math.round(volume * 100);
+      youtubePlayerRef.current.setVolume(youtubeVolume);
+      if (youtubeVolume === 0) {
+        youtubePlayerRef.current.mute();
+      } else {
+        youtubePlayerRef.current.unMute();
+      }
     } catch (error) {
       console.error("Error setting YouTube volume:", error);
     }
@@ -169,6 +211,8 @@ function Player() {
           const currentTime = youtubePlayerRef.current.getCurrentTime();
           const duration = youtubePlayerRef.current.getDuration();
           if (currentTime && duration) {
+            setYoutubeCurrentTime(currentTime);
+            setYoutubeDuration(duration);
             handleSeek(currentTime / duration);
           }
         } catch (error) {
@@ -182,6 +226,40 @@ function Player() {
       }
     };
   }, [isYouTube, isPlaying, handleSeek]);
+
+  // Handle seek for YouTube videos
+  const handleYouTubeSeek = (value) => {
+    if (isYouTube && youtubePlayerRef.current) {
+      try {
+        const seekTime = value * youtubeDuration;
+        youtubePlayerRef.current.seekTo(seekTime, true);
+        setYoutubeCurrentTime(seekTime);
+        handleSeek(value);
+      } catch (error) {
+        console.error("Error seeking YouTube video:", error);
+      }
+    } else {
+      handleSeek(value);
+    }
+  };
+
+  // Handle volume change
+  const handleVolumeChange = (newVolume) => {
+    if (isYouTube && youtubePlayerRef.current) {
+      try {
+        const youtubeVolume = Math.round(newVolume * 100);
+        youtubePlayerRef.current.setVolume(youtubeVolume);
+        if (youtubeVolume === 0) {
+          youtubePlayerRef.current.mute();
+        } else {
+          youtubePlayerRef.current.unMute();
+        }
+      } catch (error) {
+        console.error("Error setting YouTube volume:", error);
+      }
+    }
+    setVolume(newVolume);
+  };
 
   if (!currentTrack) return null;
 
@@ -212,32 +290,29 @@ function Player() {
         <Grid item xs={12} md={4}>
           <Box display="flex" flexDirection="column" alignItems="center">
             <Box display="flex" alignItems="center" mb={1}>
-              <IconButton onClick={handlePrevious}>
+              <IconButton onClick={handlePreviousTrack}>
                 <SkipPrevious />
               </IconButton>
-              <IconButton
-                onClick={isPlaying ? handlePause : handlePlay}
-                size="large"
-              >
+              <IconButton onClick={handlePlayPause} size="large">
                 {isPlaying ? <Pause /> : <PlayArrow />}
               </IconButton>
-              <IconButton onClick={handleNext}>
+              <IconButton onClick={handleNextTrack}>
                 <SkipNext />
               </IconButton>
             </Box>
             <Box display="flex" alignItems="center" width="100%">
               <Typography variant="caption" sx={{ mr: 1 }}>
-                {formatTime(currentTime)}
+                {formatTime(isYouTube ? youtubeCurrentTime : currentTime)}
               </Typography>
               <Slider
                 value={progress}
-                onChange={(_, value) => handleSeek(value)}
+                onChange={(_, value) => handleYouTubeSeek(value)}
                 min={0}
                 max={1}
                 step={0.01}
               />
               <Typography variant="caption" sx={{ ml: 1 }}>
-                {formatTime(duration)}
+                {formatTime(isYouTube ? youtubeDuration : duration)}
               </Typography>
             </Box>
           </Box>
