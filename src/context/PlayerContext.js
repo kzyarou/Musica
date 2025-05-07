@@ -23,6 +23,7 @@ function playerReducer(state, action) {
         isPlaying: true,
         currentTime: 0,
         progress: 0,
+        duration: 0,
       };
     case "PLAY":
       return {
@@ -43,36 +44,43 @@ function playerReducer(state, action) {
       return {
         ...state,
         currentTime: action.payload,
-        progress: action.payload / state.duration,
+        progress: state.duration > 0 ? action.payload / state.duration : 0,
       };
     case "SET_DURATION":
       return {
         ...state,
         duration: action.payload,
+        progress:
+          state.currentTime > 0 ? state.currentTime / action.payload : 0,
       };
     case "SET_QUEUE":
       return {
         ...state,
         queue: action.payload,
-        queueIndex: 0,
+        queueIndex: action.payload.length > 0 ? 0 : -1,
+        currentTrack: action.payload.length > 0 ? action.payload[0] : null,
       };
     case "NEXT_TRACK":
+      const nextIndex = Math.min(state.queueIndex + 1, state.queue.length - 1);
       return {
         ...state,
-        queueIndex: Math.min(state.queueIndex + 1, state.queue.length - 1),
-        currentTrack: state.queue[state.queueIndex + 1],
+        queueIndex: nextIndex,
+        currentTrack: state.queue[nextIndex],
         isPlaying: true,
         currentTime: 0,
         progress: 0,
+        duration: 0,
       };
     case "PREVIOUS_TRACK":
+      const prevIndex = Math.max(state.queueIndex - 1, 0);
       return {
         ...state,
-        queueIndex: Math.max(state.queueIndex - 1, 0),
-        currentTrack: state.queue[state.queueIndex - 1],
+        queueIndex: prevIndex,
+        currentTrack: state.queue[prevIndex],
         isPlaying: true,
         currentTime: 0,
         progress: 0,
+        duration: 0,
       };
     default:
       return state;
@@ -83,12 +91,18 @@ export function PlayerProvider({ children }) {
   const [state, dispatch] = useReducer(playerReducer, initialState);
   const soundRef = React.useRef(null);
 
+  // Cleanup function
+  const cleanupSound = () => {
+    if (soundRef.current) {
+      soundRef.current.unload();
+      soundRef.current = null;
+    }
+  };
+
   useEffect(() => {
     if (state.currentTrack) {
       // Clean up previous sound
-      if (soundRef.current) {
-        soundRef.current.unload();
-      }
+      cleanupSound();
 
       // Check if it's a YouTube video
       if (state.currentTrack.id && state.currentTrack.id.length === 11) {
@@ -114,10 +128,18 @@ export function PlayerProvider({ children }) {
           handleNext();
         },
         onload: () => {
-          dispatch({
-            type: "SET_DURATION",
-            payload: soundRef.current.duration(),
-          });
+          const duration = soundRef.current.duration();
+          if (duration) {
+            dispatch({ type: "SET_DURATION", payload: duration });
+          }
+        },
+        onloaderror: (id, error) => {
+          console.error("Error loading audio:", error);
+          cleanupSound();
+        },
+        onplayerror: (id, error) => {
+          console.error("Error playing audio:", error);
+          cleanupSound();
         },
       });
 
@@ -125,13 +147,9 @@ export function PlayerProvider({ children }) {
       if (state.isPlaying) {
         soundRef.current.play();
       }
-
-      // Update duration
-      const duration = soundRef.current.duration();
-      if (duration) {
-        dispatch({ type: "SET_DURATION", payload: duration });
-      }
     }
+
+    return cleanupSound;
   }, [state.currentTrack]);
 
   useEffect(() => {
@@ -144,9 +162,15 @@ export function PlayerProvider({ children }) {
     let interval;
     if (state.isPlaying && soundRef.current) {
       interval = setInterval(() => {
-        const currentTime = soundRef.current.seek();
-        dispatch({ type: "SET_CURRENT_TIME", payload: currentTime });
-      }, 1000);
+        try {
+          const currentTime = soundRef.current.seek();
+          if (currentTime !== undefined) {
+            dispatch({ type: "SET_CURRENT_TIME", payload: currentTime });
+          }
+        } catch (error) {
+          console.error("Error updating current time:", error);
+        }
+      }, 100);
     }
     return () => {
       if (interval) {
@@ -157,30 +181,46 @@ export function PlayerProvider({ children }) {
 
   const handlePlay = () => {
     if (soundRef.current) {
-      soundRef.current.play();
+      try {
+        soundRef.current.play();
+        dispatch({ type: "PLAY" });
+      } catch (error) {
+        console.error("Error playing audio:", error);
+      }
     }
-    dispatch({ type: "PLAY" });
   };
 
   const handlePause = () => {
     if (soundRef.current) {
-      soundRef.current.pause();
+      try {
+        soundRef.current.pause();
+        dispatch({ type: "PAUSE" });
+      } catch (error) {
+        console.error("Error pausing audio:", error);
+      }
     }
-    dispatch({ type: "PAUSE" });
   };
 
   const handleVolumeChange = (newVolume) => {
     if (soundRef.current) {
-      soundRef.current.volume(newVolume);
+      try {
+        soundRef.current.volume(newVolume);
+        dispatch({ type: "SET_VOLUME", payload: newVolume });
+      } catch (error) {
+        console.error("Error changing volume:", error);
+      }
     }
-    dispatch({ type: "SET_VOLUME", payload: newVolume });
   };
 
   const handleSeek = (progress) => {
     if (soundRef.current) {
-      const time = progress * state.duration;
-      soundRef.current.seek(time);
-      dispatch({ type: "SET_CURRENT_TIME", payload: time });
+      try {
+        const time = progress * state.duration;
+        soundRef.current.seek(time);
+        dispatch({ type: "SET_CURRENT_TIME", payload: time });
+      } catch (error) {
+        console.error("Error seeking audio:", error);
+      }
     }
   };
 
@@ -197,11 +237,15 @@ export function PlayerProvider({ children }) {
   };
 
   const setTrack = (track) => {
-    dispatch({ type: "SET_TRACK", payload: track });
+    if (track) {
+      dispatch({ type: "SET_TRACK", payload: track });
+    }
   };
 
   const setQueue = (tracks) => {
-    dispatch({ type: "SET_QUEUE", payload: tracks });
+    if (Array.isArray(tracks)) {
+      dispatch({ type: "SET_QUEUE", payload: tracks });
+    }
   };
 
   return (

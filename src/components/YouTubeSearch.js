@@ -56,16 +56,24 @@ function YouTubeSearch() {
     message: "",
     severity: "success",
   });
+  const [error, setError] = useState(null);
   const { setTrack, queue, setQueue } = usePlayer();
 
   useEffect(() => {
     // Load playlists on component mount
-    setPlaylists(getPlaylists());
+    try {
+      const loadedPlaylists = getPlaylists();
+      setPlaylists(loadedPlaylists);
+    } catch (error) {
+      console.error("Error loading playlists:", error);
+      setError("Failed to load playlists");
+    }
   }, []);
 
   const handleSearch = async (event) => {
     const query = event.target.value;
     setSearchQuery(query);
+    setError(null);
 
     if (query.length < 3) {
       setSearchResults([]);
@@ -76,8 +84,12 @@ function YouTubeSearch() {
     try {
       const results = await searchYouTubeVideos(query);
       setSearchResults(results);
+      if (results.length === 0) {
+        setError("No results found");
+      }
     } catch (error) {
       console.error("Error searching YouTube:", error);
+      setError("Failed to search YouTube. Please try again.");
       setSearchResults([]);
     } finally {
       setLoading(false);
@@ -85,17 +97,41 @@ function YouTubeSearch() {
   };
 
   const handleVideoSelect = async (video) => {
+    if (!video || !video.id) {
+      console.error("Invalid video:", video);
+      return;
+    }
+
+    setLoading(true);
     try {
       const details = await getYouTubeVideoDetails(video.id);
       if (details) {
         setTrack({ ...details, quality: selectedQuality });
+        // Update recently played
+        const recent = JSON.parse(
+          localStorage.getItem("recentlyPlayed") || "[]"
+        );
+        const updatedRecent = [
+          { ...details, quality: selectedQuality },
+          ...recent.filter((v) => v.id !== video.id),
+        ].slice(0, 5);
+        localStorage.setItem("recentlyPlayed", JSON.stringify(updatedRecent));
       }
     } catch (error) {
       console.error("Error fetching video details:", error);
+      setError("Failed to load video details");
+    } finally {
+      setLoading(false);
     }
   };
 
   const handleAddToQueue = async (video) => {
+    if (!video || !video.id) {
+      console.error("Invalid video:", video);
+      return;
+    }
+
+    setLoading(true);
     try {
       const details = await getYouTubeVideoDetails(video.id);
       if (details) {
@@ -109,10 +145,19 @@ function YouTubeSearch() {
       }
     } catch (error) {
       console.error("Error adding to queue:", error);
+      setError("Failed to add video to queue");
+    } finally {
+      setLoading(false);
     }
   };
 
   const handleSaveToPlaylist = async (video, playlistName) => {
+    if (!video || !video.id || !playlistName) {
+      console.error("Invalid video or playlist:", { video, playlistName });
+      return;
+    }
+
+    setLoading(true);
     try {
       const details = await getYouTubeVideoDetails(video.id);
       if (details) {
@@ -127,6 +172,7 @@ function YouTubeSearch() {
             severity: "success",
           });
           setPlaylists(getPlaylists());
+          setShowPlaylistDialog(false);
         } else {
           setSnackbar({
             open: true,
@@ -137,11 +183,19 @@ function YouTubeSearch() {
       }
     } catch (error) {
       console.error("Error saving to playlist:", error);
+      setError("Failed to save to playlist");
+    } finally {
+      setLoading(false);
     }
   };
 
   const handleCreatePlaylist = () => {
-    if (newPlaylistName.trim()) {
+    if (!newPlaylistName.trim()) {
+      setError("Playlist name cannot be empty");
+      return;
+    }
+
+    try {
       const success = createPlaylist(newPlaylistName.trim());
       if (success) {
         setPlaylists(getPlaylists());
@@ -158,7 +212,14 @@ function YouTubeSearch() {
           severity: "warning",
         });
       }
+    } catch (error) {
+      console.error("Error creating playlist:", error);
+      setError("Failed to create playlist");
     }
+  };
+
+  const handleCloseSnackbar = () => {
+    setSnackbar({ ...snackbar, open: false });
   };
 
   return (
@@ -191,6 +252,12 @@ function YouTubeSearch() {
         }}
       />
 
+      {error && (
+        <Alert severity="error" sx={{ mb: 3 }}>
+          {error}
+        </Alert>
+      )}
+
       {loading && (
         <Box sx={{ display: "flex", justifyContent: "center", my: 4 }}>
           <CircularProgress />
@@ -217,6 +284,10 @@ function YouTubeSearch() {
                   image={video.cover}
                   alt={video.title}
                   onClick={() => handleVideoSelect(video)}
+                  onError={(e) => {
+                    e.target.src =
+                      "https://via.placeholder.com/120x90?text=No+Image";
+                  }}
                 />
                 <CardContent
                   sx={{ flex: 1 }}
@@ -236,7 +307,12 @@ function YouTubeSearch() {
                     </IconButton>
                   </Tooltip>
                   <Tooltip title="Add to Playlist">
-                    <IconButton onClick={() => setShowPlaylistDialog(true)}>
+                    <IconButton
+                      onClick={() => {
+                        setSelectedVideo(video);
+                        setShowPlaylistDialog(true);
+                      }}
+                    >
                       <PlaylistAdd />
                     </IconButton>
                   </Tooltip>
@@ -255,14 +331,14 @@ function YouTubeSearch() {
         open={showQualityDialog}
         onClose={() => setShowQualityDialog(false)}
       >
-        <DialogTitle>Video Quality</DialogTitle>
+        <DialogTitle>Video Quality Settings</DialogTitle>
         <DialogContent>
           <FormControl fullWidth sx={{ mt: 2 }}>
             <InputLabel>Quality</InputLabel>
             <Select
               value={selectedQuality}
-              label="Quality"
               onChange={(e) => setSelectedQuality(e.target.value)}
+              label="Quality"
             >
               {QUALITY_OPTIONS.map((option) => (
                 <MenuItem key={option.value} value={option.value}>
@@ -287,7 +363,7 @@ function YouTubeSearch() {
           <Box sx={{ mt: 2 }}>
             <TextField
               fullWidth
-              label="New Playlist"
+              label="New Playlist Name"
               value={newPlaylistName}
               onChange={(e) => setNewPlaylistName(e.target.value)}
               sx={{ mb: 2 }}
@@ -297,41 +373,42 @@ function YouTubeSearch() {
               onClick={handleCreatePlaylist}
               disabled={!newPlaylistName.trim()}
             >
-              Create Playlist
+              Create New Playlist
             </Button>
           </Box>
-          <Typography variant="subtitle1" sx={{ mt: 3, mb: 1 }}>
-            Existing Playlists
-          </Typography>
-          {Object.keys(playlists).map((playlistName) => (
-            <Button
-              key={playlistName}
-              fullWidth
-              variant="outlined"
-              sx={{ mb: 1 }}
-              onClick={() => {
-                handleSaveToPlaylist(selectedVideo, playlistName);
-                setShowPlaylistDialog(false);
-              }}
-            >
-              {playlistName}
-            </Button>
-          ))}
+          <Box sx={{ mt: 3 }}>
+            <Typography variant="subtitle1" gutterBottom>
+              Existing Playlists
+            </Typography>
+            {Object.keys(playlists).map((playlistName) => (
+              <Button
+                key={playlistName}
+                fullWidth
+                variant="outlined"
+                onClick={() =>
+                  handleSaveToPlaylist(selectedVideo, playlistName)
+                }
+                sx={{ mb: 1 }}
+              >
+                {playlistName}
+              </Button>
+            ))}
+          </Box>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setShowPlaylistDialog(false)}>Close</Button>
         </DialogActions>
       </Dialog>
 
-      {/* Snackbar for notifications */}
       <Snackbar
         open={snackbar.open}
         autoHideDuration={3000}
-        onClose={() => setSnackbar({ ...snackbar, open: false })}
+        onClose={handleCloseSnackbar}
       >
         <Alert
+          onClose={handleCloseSnackbar}
           severity={snackbar.severity}
-          onClose={() => setSnackbar({ ...snackbar, open: false })}
+          sx={{ width: "100%" }}
         >
           {snackbar.message}
         </Alert>

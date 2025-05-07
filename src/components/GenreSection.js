@@ -12,6 +12,7 @@ import {
   CircularProgress,
   Paper,
   Button,
+  Alert,
 } from "@mui/material";
 import { PlayArrow, TrendingUp } from "@mui/icons-material";
 import { GENRES } from "../services/musicApi";
@@ -22,17 +23,23 @@ function GenreSection() {
   const [selectedGenre, setSelectedGenre] = useState(0);
   const [tracks, setTracks] = useState([]);
   const [loading, setLoading] = useState(true);
-  const { setTrack } = usePlayer();
+  const [error, setError] = useState(null);
+  const { setTrack, setQueue } = usePlayer();
 
   useEffect(() => {
     const loadTracks = async () => {
       setLoading(true);
+      setError(null);
       try {
         // Get YouTube trending tracks for the selected genre
         const genreTracks = YOUTUBE_TRENDING[GENRES[selectedGenre].id] || [];
+        if (genreTracks.length === 0) {
+          setError(`No tracks found for ${GENRES[selectedGenre].name}`);
+        }
         setTracks(genreTracks);
       } catch (error) {
         console.error("Error loading genre tracks:", error);
+        setError("Failed to load tracks. Please try again later.");
         setTracks([]);
       } finally {
         setLoading(false);
@@ -43,18 +50,34 @@ function GenreSection() {
   }, [selectedGenre]);
 
   const handleGenreChange = (event, newValue) => {
-    setSelectedGenre(newValue);
+    if (newValue !== selectedGenre) {
+      setSelectedGenre(newValue);
+    }
   };
 
   const handleTrackClick = (track) => {
-    setTrack(track);
-    // Update recently played
-    const recent = JSON.parse(localStorage.getItem("recentlyPlayed") || "[]");
-    const updatedRecent = [
-      track,
-      ...recent.filter((t) => t.id !== track.id),
-    ].slice(0, 5);
-    localStorage.setItem("recentlyPlayed", JSON.stringify(updatedRecent));
+    if (!track || !track.id) {
+      console.error("Invalid track:", track);
+      return;
+    }
+
+    try {
+      // Set the current track
+      setTrack(track);
+
+      // Set the queue to all tracks in the current genre
+      setQueue(tracks);
+
+      // Update recently played
+      const recent = JSON.parse(localStorage.getItem("recentlyPlayed") || "[]");
+      const updatedRecent = [
+        track,
+        ...recent.filter((t) => t.id !== track.id),
+      ].slice(0, 5);
+      localStorage.setItem("recentlyPlayed", JSON.stringify(updatedRecent));
+    } catch (error) {
+      console.error("Error handling track click:", error);
+    }
   };
 
   const currentGenre = GENRES[selectedGenre];
@@ -84,8 +107,14 @@ function GenreSection() {
         ))}
       </Tabs>
 
+      {error && (
+        <Alert severity="error" sx={{ mb: 3 }}>
+          {error}
+        </Alert>
+      )}
+
       {/* Trending Track Section */}
-      {trendingTrack && (
+      {trendingTrack && !error && (
         <Paper
           sx={{
             p: 3,
@@ -107,6 +136,10 @@ function GenreSection() {
                 sx={{ width: "100%", borderRadius: 1 }}
                 image={trendingTrack.cover}
                 alt={trendingTrack.title}
+                onError={(e) => {
+                  e.target.src =
+                    "https://via.placeholder.com/300x300?text=No+Image";
+                }}
               />
             </Grid>
             <Grid item xs={12} md={8}>
@@ -141,7 +174,7 @@ function GenreSection() {
         <Box sx={{ display: "flex", justifyContent: "center", my: 4 }}>
           <CircularProgress />
         </Box>
-      ) : (
+      ) : tracks.length > 1 ? (
         <Grid container spacing={3}>
           {tracks.slice(1).map((track) => (
             <Grid item xs={12} sm={6} md={4} lg={3} key={track.id}>
@@ -162,6 +195,10 @@ function GenreSection() {
                   height="200"
                   image={track.cover}
                   alt={track.title}
+                  onError={(e) => {
+                    e.target.src =
+                      "https://via.placeholder.com/300x300?text=No+Image";
+                  }}
                 />
                 <CardContent>
                   <Typography variant="subtitle1" noWrap>
@@ -175,7 +212,11 @@ function GenreSection() {
             </Grid>
           ))}
         </Grid>
-      )}
+      ) : !error ? (
+        <Typography variant="body1" color="textSecondary" align="center">
+          No additional tracks found for this genre.
+        </Typography>
+      ) : null}
     </Box>
   );
 }
