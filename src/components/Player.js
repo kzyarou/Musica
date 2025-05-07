@@ -70,17 +70,28 @@ function Player() {
     } else {
       setYoutubeReady(true);
     }
+
+    return () => {
+      if (youtubePlayerRef.current) {
+        youtubePlayerRef.current.destroy();
+      }
+    };
   }, []);
 
   // Initialize YouTube player
   useEffect(() => {
     if (
-      youtubeReady &&
-      currentTrack &&
-      currentTrack.id &&
-      currentTrack.id.length === 11
+      !youtubeReady ||
+      !currentTrack ||
+      !currentTrack.id ||
+      currentTrack.id.length !== 11
     ) {
-      setIsYouTube(true);
+      return;
+    }
+
+    setIsYouTube(true);
+
+    const initializePlayer = () => {
       if (youtubePlayerRef.current) {
         youtubePlayerRef.current.destroy();
       }
@@ -97,6 +108,7 @@ function Player() {
           fs: 0,
           modestbranding: 1,
           rel: 0,
+          origin: window.location.origin,
         },
         events: {
           onReady: (event) => {
@@ -110,28 +122,41 @@ function Player() {
               handleNext();
             }
           },
+          onError: (event) => {
+            console.error("YouTube Player Error:", event.data);
+            setIsYouTube(false);
+          },
         },
       });
-    } else {
-      setIsYouTube(false);
-    }
+    };
+
+    // Small delay to ensure the container is ready
+    setTimeout(initializePlayer, 100);
   }, [currentTrack, youtubeReady, isPlaying, volume, handleNext]);
 
   // Update YouTube player state
   useEffect(() => {
-    if (isYouTube && youtubePlayerRef.current) {
+    if (!isYouTube || !youtubePlayerRef.current) return;
+
+    try {
       if (isPlaying) {
         youtubePlayerRef.current.playVideo();
       } else {
         youtubePlayerRef.current.pauseVideo();
       }
+    } catch (error) {
+      console.error("Error controlling YouTube player:", error);
     }
   }, [isPlaying, isYouTube]);
 
   // Update YouTube volume
   useEffect(() => {
-    if (isYouTube && youtubePlayerRef.current) {
+    if (!isYouTube || !youtubePlayerRef.current) return;
+
+    try {
       youtubePlayerRef.current.setVolume(volume * 100);
+    } catch (error) {
+      console.error("Error setting YouTube volume:", error);
     }
   }, [volume, isYouTube]);
 
@@ -140,10 +165,14 @@ function Player() {
     let interval;
     if (isYouTube && youtubePlayerRef.current && isPlaying) {
       interval = setInterval(() => {
-        const currentTime = youtubePlayerRef.current.getCurrentTime();
-        const duration = youtubePlayerRef.current.getDuration();
-        if (currentTime && duration) {
-          handleSeek(currentTime / duration);
+        try {
+          const currentTime = youtubePlayerRef.current.getCurrentTime();
+          const duration = youtubePlayerRef.current.getDuration();
+          if (currentTime && duration) {
+            handleSeek(currentTime / duration);
+          }
+        } catch (error) {
+          console.error("Error updating YouTube progress:", error);
         }
       }, 1000);
     }
@@ -234,7 +263,19 @@ function Player() {
       </Grid>
 
       {/* Hidden YouTube player */}
-      {isYouTube && <div id="youtube-player" style={{ display: "none" }} />}
+      {isYouTube && (
+        <div
+          id="youtube-player"
+          style={{
+            position: "absolute",
+            top: "-9999px",
+            left: "-9999px",
+            width: "1px",
+            height: "1px",
+            overflow: "hidden",
+          }}
+        />
+      )}
     </PlayerContainer>
   );
 }
