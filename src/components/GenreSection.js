@@ -14,7 +14,8 @@ import {
   Button,
 } from "@mui/material";
 import { PlayArrow, TrendingUp } from "@mui/icons-material";
-import { GENRES, getTracksByGenre } from "../services/musicApi";
+import { GENRES } from "../services/musicApi";
+import { YOUTUBE_TRENDING } from "../services/youtubeTrending";
 import { usePlayer } from "../context/PlayerContext";
 
 function GenreSection() {
@@ -27,7 +28,8 @@ function GenreSection() {
     const loadTracks = async () => {
       setLoading(true);
       try {
-        const genreTracks = await getTracksByGenre(GENRES[selectedGenre].tag);
+        // Get YouTube trending tracks for the selected genre
+        const genreTracks = YOUTUBE_TRENDING[GENRES[selectedGenre].id] || [];
         setTracks(genreTracks);
       } catch (error) {
         console.error("Error loading genre tracks:", error);
@@ -56,7 +58,7 @@ function GenreSection() {
   };
 
   const currentGenre = GENRES[selectedGenre];
-  const trendingTrack = currentGenre.trendingTrack;
+  const trendingTrack = tracks[0] || null;
 
   return (
     <Box sx={{ mt: 4 }}>
@@ -83,47 +85,55 @@ function GenreSection() {
       </Tabs>
 
       {/* Trending Track Section */}
-      <Paper
-        sx={{
-          p: 3,
-          mb: 4,
-          background: "linear-gradient(45deg, #1a1a1a 30%, #2d2d2d 90%)",
-          color: "white",
-        }}
-      >
-        <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
-          <TrendingUp sx={{ mr: 1 }} />
-          <Typography variant="h6">Trending in {currentGenre.name}</Typography>
-        </Box>
-        <Grid container spacing={2} alignItems="center">
-          <Grid item xs={12} md={4}>
-            <CardMedia
-              component="img"
-              sx={{ width: "100%", borderRadius: 1 }}
-              image={trendingTrack.cover}
-              alt={trendingTrack.title}
-            />
-          </Grid>
-          <Grid item xs={12} md={8}>
-            <Typography variant="h5" gutterBottom>
-              {trendingTrack.title}
+      {trendingTrack && (
+        <Paper
+          sx={{
+            p: 3,
+            mb: 4,
+            background: "linear-gradient(45deg, #1a1a1a 30%, #2d2d2d 90%)",
+            color: "white",
+          }}
+        >
+          <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
+            <TrendingUp sx={{ mr: 1 }} />
+            <Typography variant="h6">
+              Trending in {currentGenre.name}
             </Typography>
-            <Typography variant="subtitle1" color="text.secondary" gutterBottom>
-              {trendingTrack.artist}
-            </Typography>
-            <Button
-              variant="contained"
-              startIcon={<PlayArrow />}
-              onClick={() => handleTrackClick(trendingTrack)}
-              sx={{ mt: 2 }}
-            >
-              Play Now
-            </Button>
+          </Box>
+          <Grid container spacing={2} alignItems="center">
+            <Grid item xs={12} md={4}>
+              <CardMedia
+                component="img"
+                sx={{ width: "100%", borderRadius: 1 }}
+                image={trendingTrack.cover}
+                alt={trendingTrack.title}
+              />
+            </Grid>
+            <Grid item xs={12} md={8}>
+              <Typography variant="h5" gutterBottom>
+                {trendingTrack.title}
+              </Typography>
+              <Typography
+                variant="subtitle1"
+                color="text.secondary"
+                gutterBottom
+              >
+                {trendingTrack.artist}
+              </Typography>
+              <Button
+                variant="contained"
+                startIcon={<PlayArrow />}
+                onClick={() => handleTrackClick(trendingTrack)}
+                sx={{ mt: 2 }}
+              >
+                Play Now
+              </Button>
+            </Grid>
           </Grid>
-        </Grid>
-      </Paper>
+        </Paper>
+      )}
 
-      <Typography variant="h6" sx={{ mb: 2 }}>
+      <Typography variant="h5" sx={{ mb: 2 }}>
         More {currentGenre.name} Tracks
       </Typography>
 
@@ -133,7 +143,7 @@ function GenreSection() {
         </Box>
       ) : (
         <Grid container spacing={3}>
-          {tracks.map((track) => (
+          {tracks.slice(1).map((track) => (
             <Grid item xs={12} sm={6} md={4} lg={3} key={track.id}>
               <Card
                 sx={{
@@ -150,10 +160,7 @@ function GenreSection() {
                 <CardMedia
                   component="img"
                   height="200"
-                  image={
-                    track.cover ||
-                    "https://source.unsplash.com/random/300x300?music"
-                  }
+                  image={track.cover}
                   alt={track.title}
                 />
                 <CardContent>

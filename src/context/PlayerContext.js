@@ -1,222 +1,232 @@
-import React, {
-  createContext,
-  useContext,
-  useState,
-  useRef,
-  useEffect,
-} from "react";
+import React, { createContext, useContext, useReducer, useEffect } from "react";
 import { Howl } from "howler";
 
 const PlayerContext = createContext();
 
-export const usePlayer = () => useContext(PlayerContext);
+const initialState = {
+  currentTrack: null,
+  isPlaying: false,
+  volume: 0.5,
+  currentTime: 0,
+  duration: 0,
+  progress: 0,
+  queue: [],
+  queueIndex: -1,
+};
 
-export const PlayerProvider = ({ children }) => {
-  const [currentTrack, setCurrentTrack] = useState(null);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [progress, setProgress] = useState(0);
-  const [currentTime, setCurrentTime] = useState(0);
-  const [duration, setDuration] = useState(0);
-  const [volume, setVolume] = useState(1);
-  const [queue, setQueue] = useState([]);
-  const [isYouTube, setIsYouTube] = useState(false);
-  const soundRef = useRef(null);
-  const progressInterval = useRef(null);
-  const youtubePlayerRef = useRef(null);
+function playerReducer(state, action) {
+  switch (action.type) {
+    case "SET_TRACK":
+      return {
+        ...state,
+        currentTrack: action.payload,
+        isPlaying: true,
+        currentTime: 0,
+        progress: 0,
+      };
+    case "PLAY":
+      return {
+        ...state,
+        isPlaying: true,
+      };
+    case "PAUSE":
+      return {
+        ...state,
+        isPlaying: false,
+      };
+    case "SET_VOLUME":
+      return {
+        ...state,
+        volume: action.payload,
+      };
+    case "SET_CURRENT_TIME":
+      return {
+        ...state,
+        currentTime: action.payload,
+        progress: action.payload / state.duration,
+      };
+    case "SET_DURATION":
+      return {
+        ...state,
+        duration: action.payload,
+      };
+    case "SET_QUEUE":
+      return {
+        ...state,
+        queue: action.payload,
+        queueIndex: 0,
+      };
+    case "NEXT_TRACK":
+      return {
+        ...state,
+        queueIndex: Math.min(state.queueIndex + 1, state.queue.length - 1),
+        currentTrack: state.queue[state.queueIndex + 1],
+        isPlaying: true,
+        currentTime: 0,
+        progress: 0,
+      };
+    case "PREVIOUS_TRACK":
+      return {
+        ...state,
+        queueIndex: Math.max(state.queueIndex - 1, 0),
+        currentTrack: state.queue[state.queueIndex - 1],
+        isPlaying: true,
+        currentTime: 0,
+        progress: 0,
+      };
+    default:
+      return state;
+  }
+}
 
-  // Update progress for regular audio
+export function PlayerProvider({ children }) {
+  const [state, dispatch] = useReducer(playerReducer, initialState);
+  const soundRef = React.useRef(null);
+
   useEffect(() => {
-    if (soundRef.current && !isYouTube) {
-      const updateProgress = () => {
+    if (state.currentTrack) {
+      // Clean up previous sound
+      if (soundRef.current) {
+        soundRef.current.unload();
+      }
+
+      // Check if it's a YouTube video
+      if (state.currentTrack.id && state.currentTrack.id.length === 11) {
+        // YouTube video handling is done in the Player component
+        return;
+      }
+
+      // Create new sound
+      soundRef.current = new Howl({
+        src: [state.currentTrack.url],
+        html5: true,
+        volume: state.volume,
+        onplay: () => {
+          dispatch({ type: "PLAY" });
+        },
+        onpause: () => {
+          dispatch({ type: "PAUSE" });
+        },
+        onstop: () => {
+          dispatch({ type: "PAUSE" });
+        },
+        onend: () => {
+          handleNext();
+        },
+        onload: () => {
+          dispatch({
+            type: "SET_DURATION",
+            payload: soundRef.current.duration(),
+          });
+        },
+      });
+
+      // Start playing
+      if (state.isPlaying) {
+        soundRef.current.play();
+      }
+
+      // Update duration
+      const duration = soundRef.current.duration();
+      if (duration) {
+        dispatch({ type: "SET_DURATION", payload: duration });
+      }
+    }
+  }, [state.currentTrack]);
+
+  useEffect(() => {
+    if (soundRef.current) {
+      soundRef.current.volume(state.volume);
+    }
+  }, [state.volume]);
+
+  useEffect(() => {
+    let interval;
+    if (state.isPlaying && soundRef.current) {
+      interval = setInterval(() => {
         const currentTime = soundRef.current.seek();
-        const duration = soundRef.current.duration();
-        setCurrentTime(currentTime);
-        setDuration(duration);
-        setProgress(currentTime / duration);
-      };
-
-      if (isPlaying) {
-        progressInterval.current = setInterval(updateProgress, 1000);
-      } else {
-        clearInterval(progressInterval.current);
+        dispatch({ type: "SET_CURRENT_TIME", payload: currentTime });
+      }, 1000);
+    }
+    return () => {
+      if (interval) {
+        clearInterval(interval);
       }
-
-      return () => clearInterval(progressInterval.current);
-    }
-  }, [isPlaying, isYouTube]);
-
-  // Update progress for YouTube videos
-  useEffect(() => {
-    if (youtubePlayerRef.current && isYouTube) {
-      const updateProgress = () => {
-        const currentTime = youtubePlayerRef.current.getCurrentTime();
-        const duration = youtubePlayerRef.current.getDuration();
-        setCurrentTime(currentTime);
-        setDuration(duration);
-        setProgress(currentTime / duration);
-      };
-
-      if (isPlaying) {
-        progressInterval.current = setInterval(updateProgress, 1000);
-      } else {
-        clearInterval(progressInterval.current);
-      }
-
-      return () => clearInterval(progressInterval.current);
-    }
-  }, [isPlaying, isYouTube]);
-
-  // Handle track changes
-  useEffect(() => {
-    if (currentTrack) {
-      if (currentTrack.url?.includes("youtube.com")) {
-        setIsYouTube(true);
-        if (soundRef.current) {
-          soundRef.current.stop();
-          soundRef.current.unload();
-        }
-      } else {
-        setIsYouTube(false);
-        if (soundRef.current) {
-          soundRef.current.stop();
-          soundRef.current.unload();
-        }
-        soundRef.current = new Howl({
-          src: [currentTrack.url],
-          html5: true,
-          volume: volume,
-          onplay: () => {
-            setIsPlaying(true);
-            console.log("Audio started playing");
-          },
-          onpause: () => {
-            setIsPlaying(false);
-            console.log("Audio paused");
-          },
-          onstop: () => {
-            setIsPlaying(false);
-            console.log("Audio stopped");
-          },
-          onend: () => {
-            console.log("Audio ended");
-            handleNext();
-          },
-          onload: () => {
-            console.log("Audio loaded");
-            setDuration(soundRef.current.duration());
-          },
-          onloaderror: (id, error) => {
-            console.error("Error loading audio:", error);
-          },
-          onplayerror: (id, error) => {
-            console.error("Error playing audio:", error);
-          },
-        });
-      }
-    }
-  }, [currentTrack]);
-
-  // Handle volume changes
-  useEffect(() => {
-    if (soundRef.current && !isYouTube) {
-      soundRef.current.volume(volume);
-    } else if (youtubePlayerRef.current && isYouTube) {
-      youtubePlayerRef.current.setVolume(volume * 100);
-    }
-  }, [volume, isYouTube]);
+    };
+  }, [state.isPlaying]);
 
   const handlePlay = () => {
-    if (isYouTube) {
-      if (youtubePlayerRef.current) {
-        youtubePlayerRef.current.playVideo();
-        setIsPlaying(true);
-      }
-    } else if (soundRef.current) {
+    if (soundRef.current) {
       soundRef.current.play();
-      setIsPlaying(true);
     }
+    dispatch({ type: "PLAY" });
   };
 
   const handlePause = () => {
-    if (isYouTube) {
-      if (youtubePlayerRef.current) {
-        youtubePlayerRef.current.pauseVideo();
-        setIsPlaying(false);
-      }
-    } else if (soundRef.current) {
+    if (soundRef.current) {
       soundRef.current.pause();
-      setIsPlaying(false);
+    }
+    dispatch({ type: "PAUSE" });
+  };
+
+  const handleVolumeChange = (newVolume) => {
+    if (soundRef.current) {
+      soundRef.current.volume(newVolume);
+    }
+    dispatch({ type: "SET_VOLUME", payload: newVolume });
+  };
+
+  const handleSeek = (progress) => {
+    if (soundRef.current) {
+      const time = progress * state.duration;
+      soundRef.current.seek(time);
+      dispatch({ type: "SET_CURRENT_TIME", payload: time });
     }
   };
 
   const handleNext = () => {
-    if (queue.length > 0) {
-      const nextTrack = queue[0];
-      setQueue(queue.slice(1));
-      setCurrentTrack(nextTrack);
-    } else {
-      setCurrentTrack(null);
-      setIsPlaying(false);
+    if (state.queueIndex < state.queue.length - 1) {
+      dispatch({ type: "NEXT_TRACK" });
     }
   };
 
   const handlePrevious = () => {
-    // Implement previous track logic if needed
-  };
-
-  const handleSeek = (value) => {
-    if (isYouTube) {
-      if (youtubePlayerRef.current) {
-        const duration = youtubePlayerRef.current.getDuration();
-        const seekTime = duration * value;
-        youtubePlayerRef.current.seekTo(seekTime);
-        setCurrentTime(seekTime);
-      }
-    } else if (soundRef.current) {
-      const duration = soundRef.current.duration();
-      const seekTime = duration * value;
-      soundRef.current.seek(seekTime);
-      setCurrentTime(seekTime);
+    if (state.queueIndex > 0) {
+      dispatch({ type: "PREVIOUS_TRACK" });
     }
-    setProgress(value);
-  };
-
-  const handleVolumeChange = (value) => {
-    setVolume(value);
   };
 
   const setTrack = (track) => {
-    setCurrentTrack(track);
-    setIsPlaying(true);
+    dispatch({ type: "SET_TRACK", payload: track });
   };
 
-  const setYoutubePlayer = (player) => {
-    youtubePlayerRef.current = player;
+  const setQueue = (tracks) => {
+    dispatch({ type: "SET_QUEUE", payload: tracks });
   };
 
   return (
     <PlayerContext.Provider
       value={{
-        currentTrack,
-        isPlaying,
-        progress,
-        currentTime,
-        duration,
-        volume,
-        queue,
-        isYouTube,
-        setTrack,
-        setQueue,
+        ...state,
         handlePlay,
         handlePause,
+        handleVolumeChange,
+        handleSeek,
         handleNext,
         handlePrevious,
-        handleSeek,
-        handleVolumeChange,
-        setYoutubePlayer,
+        setTrack,
+        setQueue,
       }}
     >
       {children}
     </PlayerContext.Provider>
   );
-};
+}
+
+export function usePlayer() {
+  const context = useContext(PlayerContext);
+  if (!context) {
+    throw new Error("usePlayer must be used within a PlayerProvider");
+  }
+  return context;
+}
